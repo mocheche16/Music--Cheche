@@ -22,14 +22,49 @@ function formatDate(iso) {
   })
 }
 
-function StatusBadge({ status, progress }) {
+function formatTime(seconds) {
+  if (!seconds) return '--:--'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function StatusBadge({ status, progress, processingTime, createdAt }) {
+  const [elapsed, setElapsed] = useState(0)
   const meta = STATUS_META[status] || STATUS_META.pending
+
+  // Cronómetro en tiempo real para el estado 'processing'
+  useEffect(() => {
+    if (status !== 'processing') return
+    
+    // Si ya tenemos un processingTime del backend, lo usamos (aunque suele venir al final)
+    // Pero para ser fluidos, calculamos el tiempo desde 'createdAt'
+    const startTime = new Date(createdAt).getTime()
+    
+    const interval = setInterval(() => {
+      const now = Date.now()
+      setElapsed(Math.floor((now - startTime) / 1000))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [status, createdAt])
+
   return (
     <div className="status-badge-container">
-      <span className={`badge ${meta.cls}`}>
-        {meta.dot && <span className="pulse-dot" />}
-        {meta.label} {status === 'processing' && progress > 0 ? `${progress}%` : ''}
-      </span>
+      <div className="status-badge-top">
+        <span className={`badge ${meta.cls}`}>
+          {meta.dot && <span className="pulse-dot" />}
+          {meta.label} {status === 'processing' && progress > 0 ? `${progress}%` : ''}
+        </span>
+        
+        {/* Mostrar tiempo transcurrido o tiempo total */}
+        {(status === 'processing' || status === 'done') && (
+          <span className="timer-label">
+             ⏱️ {status === 'processing' ? formatTime(elapsed) : formatTime(processingTime)}
+          </span>
+        )}
+      </div>
+
       {status === 'processing' && (
         <div className="progress-mini-bar">
           <div className="progress-mini-fill" style={{ width: `${progress}%` }} />
@@ -162,7 +197,12 @@ export default function Catalog({ onSelectSong, refreshTrigger }) {
                   }
                 </td>
                 <td className="col-status">
-                  <StatusBadge status={track.status} progress={track.progress} />
+                  <StatusBadge 
+                    status={track.status} 
+                    progress={track.progress} 
+                    processingTime={track.processing_time}
+                    createdAt={track.created_at}
+                  />
                 </td>
                 <td className="col-date">{formatDate(track.created_at)}</td>
                 <td className="col-action">
@@ -250,7 +290,15 @@ export default function Catalog({ onSelectSong, refreshTrigger }) {
         .catalog-error { color: var(--clr-error); }
         
         .status-badge-container {
-          display: flex; flex-direction: column; gap: 6px; min-width: 100px;
+          display: flex; flex-direction: column; gap: 6px; min-width: 140px;
+        }
+        .status-badge-top {
+          display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        }
+        .timer-label {
+          font-family: var(--font-mono); font-size: 11px;
+          color: var(--clr-text-muted); background: rgba(255,255,255,0.03);
+          padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);
         }
         .progress-mini-bar {
           height: 4px; width: 100%;

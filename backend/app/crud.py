@@ -123,6 +123,16 @@ def set_progress(db: Session, song_id: int, progress: int) -> Optional[Song]:
         db.refresh(song)
     return song
 
+
+def set_processing_time(db: Session, song_id: int, seconds: int) -> Optional[Song]:
+    """Guarda el tiempo total que tomó el procesamiento."""
+    song = get_song(db, song_id)
+    if song:
+        song.processing_time = seconds
+        db.commit()
+        db.refresh(song)
+    return song
+
 # ──────────────────────────────────────────────────────────────────────────────
 # DELETE
 # ──────────────────────────────────────────────────────────────────────────────

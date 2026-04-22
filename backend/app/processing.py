@@ -141,6 +141,11 @@ def separate_stems(
 
     # Regex para capturar el porcentaje: " 15%|"
     re_progress = re.compile(r"(\d+)%\|")
+    
+    # Lógica para progreso monotónico (evita que vuelva a 0 si hay varios shifts/ciclos)
+    current_cycle = 0
+    max_cycles = 4  # Coincide con --shifts 4
+    last_percentage = 0
 
     while True:
         line = process.stdout.readline()
@@ -152,7 +157,17 @@ def separate_stems(
             match = re_progress.search(line)
             if match and progress_callback:
                 percentage = int(match.group(1))
-                progress_callback(percentage)
+                
+                # Si el porcentaje baja de repente (ej: de 100 a 0), es un nuevo ciclo/shift
+                if percentage < last_percentage and last_percentage > 90:
+                    current_cycle = min(current_cycle + 1, max_cycles - 1)
+                
+                last_percentage = percentage
+                
+                # Calcular progreso global: cada ciclo es un 25% del total (si max_cycles=4)
+                # El 5% inicial ya lo pusimos en run_full_pipeline, aquí mapeamos el 95% restante
+                global_progress = 5 + int(((current_cycle * 100 + percentage) / (max_cycles * 100)) * 90)
+                progress_callback(min(99, global_progress))
             
             # Print de depuración ocasional si no es la barra de progreso
             if "%|" not in line:
@@ -160,6 +175,10 @@ def separate_stems(
 
     if process.returncode != 0:
         raise RuntimeError(f"Demucs falló con código {process.returncode}.")
+
+    # Al finalizar, forzar 100%
+    if progress_callback:
+        progress_callback(100)
 
     print("[Demucs] Separación completada.")
 

@@ -53,7 +53,8 @@ def _process_song_background(song_id: int, file_path: str):
         print(f"\n{'='*60}")
         print(f"[Pipeline] Iniciando procesamiento — Song ID: {song_id}")
         print(f"{'='*60}")
-
+        start_time = time.time()
+        
         result = run_full_pipeline(
             song_id=song_id,
             file_path=file_path,
@@ -61,12 +62,17 @@ def _process_song_background(song_id: int, file_path: str):
             progress_callback=lambda p: crud.set_progress(db, song_id, p)
         )
 
+        end_time = time.time()
+        duration = int(end_time - start_time)
+
+        crud.set_processing_time(db, song_id, duration)
+        
         crud.set_done(
             db=db,
             song_id=song_id,
             bpm=result["bpm"],
             key=result["key"],
-            stems=result["stems"],
+            stems_paths=result["stems"],
         )
         print(f"[Pipeline] ✅ Song {song_id} completada — BPM={result['bpm']:.1f}, Key={result['key']}")
 

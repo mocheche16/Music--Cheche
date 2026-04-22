@@ -42,6 +42,7 @@ class SongListItem(BaseModel):
     key:           Optional[str]   = None
     status:        str
     progress:      int = 0
+    duration_seconds: Optional[int] = None
     created_at:    datetime
 
 
@@ -55,7 +56,9 @@ class SongResponse(BaseModel):
     key:           Optional[str]   = None
     status:        str
     progress:      int = 0
+    duration_seconds: Optional[int] = None
     error_msg:     Optional[str]   = None
+    processing_time: Optional[int] = None
     created_at:    datetime
     updated_at:    datetime
     stems:         Optional[StemsResponse] = None
@@ -66,6 +69,7 @@ class SongStatusResponse(BaseModel):
     id:       int
     status:   str
     progress: int = 0
+    processing_time: Optional[int] = None
     error_msg: Optional[str] = None
 
 
