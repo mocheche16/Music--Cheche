@@ -1,0 +1,23 @@
+# Entornos Virtuales
+backend/venv/
+backend/env/
+.env
+
+# Archivos de caché y logs de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Archivos subidos y generados (audio)
+backend/uploads/
+backend/stems/
+
+# Node.js / React
+frontend/node_modules/
+frontend/dist/
+frontend/.eslintcache
+
+# Archivos del Sistema Operativo
+.DS_Store
+Thumbs.db
