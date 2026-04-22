@@ -5,7 +5,6 @@
  * controles globales de reproducción y botón "Enviar a REAPER".
  */
 import { useEffect, useState } from 'react'
-import { useAudioEngine } from '../hooks/useAudioEngine'
 import ChannelStrip from './ChannelStrip'
 import api, { getExportAllUrl } from '../api/client'
 
@@ -18,19 +17,16 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function MixerDashboard({ song, onClose }) {
-  const engine = useAudioEngine(song)
+export default function MixerDashboard({ song, engine, onClose }) {
   const [reaperLoading, setReaperLoading] = useState(false)
   const [reaperMsg, setReaperMsg]         = useState(null)
 
   // Cargar buffers cuando se monta el componente
   useEffect(() => {
-    if (song?.status === 'done') engine.loadBuffers()
-    return () => {
-      // Detener reproducción al desmontar
-      if (engine.playing) engine.pause()
+    if (song && !engine.loaded && !engine.loading) {
+      engine.loadBuffers()
     }
-  }, [song?.id])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [song, engine])
 
   const handleSeek = (e) => {
     const rect = e.currentTarget.getBoundingClientRect()

@@ -7,22 +7,34 @@ import { useState, useCallback } from 'react'
 import Catalog from './components/Catalog'
 import MixerDashboard from './components/MixerDashboard'
 import UploadZone from './components/UploadZone'
+import MiniPlayer from './components/MiniPlayer'
 import { fetchTrack } from './api/client'
+import { useAudioEngine } from './hooks/useAudioEngine'
 
 export default function App() {
   const [selectedSong, setSelectedSong]     = useState(null)
+  const [mixerVisible, setMixerVisible]     = useState(false)
   const [catalogRefresh, setCatalogRefresh] = useState(0)
   const [showUpload, setShowUpload]         = useState(false)
+
+  const engine = useAudioEngine(selectedSong)
 
   // Al seleccionar una canción del catálogo, obtener detalles completos
   const handleSelectSong = useCallback(async (song) => {
     try {
+      // Si es la misma canción, solo mostramos el mixer
+      if (selectedSong?.id === song.id) {
+        setMixerVisible(true)
+        return
+      }
+
       const { data } = await fetchTrack(song.id)
       setSelectedSong(data)
+      setMixerVisible(true)
     } catch (err) {
       console.error('[App] Error cargando detalle de canción:', err)
     }
-  }, [])
+  }, [selectedSong])
 
   const handleUploadComplete = useCallback(() => {
     setCatalogRefresh((n) => n + 1)
@@ -81,10 +93,20 @@ export default function App() {
       </main>
 
       {/* ── Mixer (overlay modal) ────────────────────────────────────────── */}
-      {selectedSong && (
+      {selectedSong && mixerVisible && (
         <MixerDashboard
           song={selectedSong}
-          onClose={() => setSelectedSong(null)}
+          engine={engine}
+          onClose={() => setMixerVisible(false)}
+        />
+      )}
+
+      {/* ── Mini Reproductor Persistente ─────────────────────────────────── */}
+      {selectedSong && !mixerVisible && (
+        <MiniPlayer
+          song={selectedSong}
+          engine={engine}
+          onExpand={() => setMixerVisible(true)}
         />
       )}
 
