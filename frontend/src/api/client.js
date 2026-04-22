@@ -43,4 +43,7 @@ export const deleteTrack = (id) => api.delete(`/tracks/${id}`)
 export const getStemUrl = (songId, stemName) =>
   `/stems/${songId}/${stemName}`
 
+export const getExportAllUrl = (songId, format) =>
+  `/api/tracks/${songId}/export-all?format=${format}`
+
 export default api

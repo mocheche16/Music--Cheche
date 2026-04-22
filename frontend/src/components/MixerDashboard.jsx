@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { useAudioEngine } from '../hooks/useAudioEngine'
 import ChannelStrip from './ChannelStrip'
-import api from '../api/client'
+import api, { getExportAllUrl } from '../api/client'
 
 const STEMS_ORDER = ['vocals', 'drums', 'bass', 'guitar', 'piano', 'other']
 
@@ -79,15 +79,31 @@ export default function MixerDashboard({ song, onClose }) {
               </div>
             </div>
           </div>
-          <button
-            className="btn btn-reaper"
-            onClick={handleSendToReaper}
-            disabled={reaperLoading}
-            id="btn-send-to-reaper"
-          >
-            {reaperLoading ? <span className="spinner" /> : '🎛️'}
-            Enviar a REAPER
-          </button>
+          <div className="mixer-header-actions">
+            <a
+              href={getExportAllUrl(song.id, 'wav')}
+              className="btn btn-ghost btn-sm btn-export"
+              title="Descargar todas las pistas en formato WAV (sin pérdida)"
+            >
+              📦 WAV
+            </a>
+            <a
+              href={getExportAllUrl(song.id, 'mp3')}
+              className="btn btn-ghost btn-sm btn-export"
+              title="Descargar todas las pistas en formato MP3 (comprimido)"
+            >
+              📦 MP3
+            </a>
+            <button
+              className="btn btn-reaper"
+              onClick={handleSendToReaper}
+              disabled={reaperLoading}
+              id="btn-send-to-reaper"
+            >
+              {reaperLoading ? <span className="spinner" /> : '🎛️'}
+              Enviar a REAPER
+            </button>
+          </div>
         </div>
 
         {reaperMsg && (
@@ -220,6 +236,18 @@ export default function MixerDashboard({ song, onClose }) {
           border-bottom: 1px solid var(--clr-border);
           gap: 16px;
           flex-wrap: wrap;
+        }
+        .mixer-header-actions {
+          display: flex; gap: 10px; align-items: center;
+        }
+        .btn-export {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: var(--clr-border-bright);
+        }
+        .btn-export:hover {
+          background: rgba(108, 99, 255, 0.1);
+          color: var(--clr-primary-light);
+          border-color: var(--clr-primary-glow);
         }
 
         .mixer-song-info {

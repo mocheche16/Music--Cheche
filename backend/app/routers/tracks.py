@@ -3,14 +3,17 @@ routers/tracks.py — Endpoints REST de la API
 """
 import os
 import traceback
+import io
+import zipfile
+import soundfile as sf
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import (
     APIRouter, BackgroundTasks, Depends, File, HTTPException,
     UploadFile, status
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app import crud
@@ -312,4 +315,75 @@ def serve_stem(song_id: int, stem_name: str, db: Session = Depends(get_db)):
         media_type="audio/wav",
         filename=f"{song.original_name}_{stem_name}.wav",
         headers={"Accept-Ranges": "bytes"},
+    )
+# ──────────────────────────────────────────────────────────────────────────────
+# GET /tracks/{id}/export-all
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/tracks/{song_id}/export-all",
+    summary="Exportar todos los stems en un archivo ZIP (WAV o MP3)",
+)
+def export_all_stems(
+    song_id: int,
+    format: str = "wav",
+    db: Session = Depends(get_db)
+):
+    """
+    Busca los stems de la canción, los comprime en un ZIP y los retorna.
+    Si format='mp3', los convierte al vuelo antes de comprimir.
+    """
+    song = crud.get_song(db, song_id)
+    if not song or song.status != ProcessingStatus.done:
+        raise HTTPException(status_code=404, detail="Canción no encontrada o no procesada")
+
+    # Mapeo de nombres amigables para los archivos dentro del ZIP
+    stem_labels = {
+        "vocals": "Voces",
+        "drums": "Bateria",
+        "bass": "Bajo",
+        "guitar": "Guitarra",
+        "piano": "Piano",
+        "other": "Otros"
+    }
+
+    # Preparar el archivo ZIP en memoria
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for stem_key, label in stem_labels.items():
+            # Obtener el path del stem desde el objeto song
+            path_str = getattr(song, f"{stem_key}_path", None)
+            if not path_str:
+                continue
+            
+            path = Path(path_str)
+            if not path.exists():
+                continue
+
+            filename = f"{label}.{format}"
+
+            if format.lower() == "mp3":
+                # Convertir WAV a MP3 al vuelo usando soundfile
+                try:
+                    data, samplerate = sf.read(path)
+                    mp3_io = io.BytesIO()
+                    sf.write(mp3_io, data, samplerate, format='MP3')
+                    zip_file.writestr(filename, mp3_io.getvalue())
+                except Exception as e:
+                    print(f"[Export] Error convirtiendo {stem_key} a MP3: {e}")
+                    # Si falla la conversión, intentamos meter el WAV original
+                    zip_file.write(path, arcname=f"{label}.wav")
+            else:
+                # Añadir el WAV original directamente
+                zip_file.write(path, arcname=filename)
+
+    zip_buffer.seek(0)
+    
+    clean_name = "".join(c for c in song.original_name if c.isalnum() or c in (" ", "_", "-")).strip()
+    zip_filename = f"Stems_{clean_name}_{format.upper()}.zip"
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
     )
