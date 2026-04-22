@@ -118,6 +118,7 @@ def separate_stems(file_path: str, output_dir: str, song_id: int) -> dict:
     cmd = [
         sys.executable, "-m", "app.run_demucs",
         "-n", DEMUCS_MODEL,
+        "--shifts", "2",
         "--out", str(output_path),
         str(file_path),
     ]

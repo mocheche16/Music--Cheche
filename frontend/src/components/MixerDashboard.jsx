@@ -122,6 +122,7 @@ export default function MixerDashboard({ song, onClose }) {
                 <ChannelStrip
                   key={stemName}
                   stemName={stemName}
+                  songId={song.id}
                   volume={engine.channels[stemName].volume}
                   muted={engine.channels[stemName].muted}
                   solo={engine.channels[stemName].solo}

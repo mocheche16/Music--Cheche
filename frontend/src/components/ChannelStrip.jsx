@@ -4,6 +4,7 @@
  * Canal individual del mixer: nombre, ícono de instrumento,
  * VU meter animado, slider de volumen, botones MUTE y SOLO.
  */
+import { getStemUrl } from '../api/client'
 
 const STEM_META = {
   vocals: { label: 'Voces',    icon: '🎤', color: '#ff6b9d' },
@@ -16,6 +17,7 @@ const STEM_META = {
 
 export default function ChannelStrip({
   stemName,
+  songId,
   volume,
   muted,
   solo,
@@ -61,9 +63,12 @@ export default function ChannelStrip({
 
       {/* Slider de volumen (vertical via rotate) */}
       <div className="volume-wrapper">
-        <span className="volume-value" style={{ color: meta.color }}>
-          {volumePct}%
-        </span>
+        <div className="volume-label">
+          <span title="Volumen">🔊</span>
+          <span className="volume-value" style={{ color: meta.color }}>
+            {volumePct}%
+          </span>
+        </div>
         <div className="slider-track">
           <input
             type="range"
@@ -101,6 +106,18 @@ export default function ChannelStrip({
           S
         </button>
       </div>
+
+      {/* Download Button */}
+      {songId && (
+        <a
+          href={getStemUrl(songId, stemName)}
+          download={`${stemName}.wav`}
+          className="download-stem-btn"
+          title={`Descargar ${meta.label}`}
+        >
+          ⬇️ WAV
+        </a>
+      )}
 
       <style>{`
         .channel-strip {
@@ -162,6 +179,9 @@ export default function ChannelStrip({
         .volume-wrapper {
           width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px;
         }
+        .volume-label {
+          display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 4px;
+        }
         .volume-value {
           font-family: var(--font-mono); font-size: 12px; font-weight: 600;
         }
@@ -199,6 +219,28 @@ export default function ChannelStrip({
           border-color: var(--clr-solo);
           color: var(--clr-solo);
           box-shadow: 0 0 10px rgba(245,158,11,0.3);
+        }
+
+        /* Download Button */
+        .download-stem-btn {
+          margin-top: 4px;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 4px 10px;
+          border-radius: var(--radius-sm);
+          background: rgba(255, 255, 255, 0.05);
+          color: var(--clr-text-secondary);
+          text-decoration: none;
+          transition: all var(--transition-fast);
+          border: 1px solid var(--clr-border);
+        }
+        .download-stem-btn:hover {
+          background: rgba(108, 99, 255, 0.15);
+          color: var(--clr-primary-light);
+          border-color: var(--clr-primary-glow);
         }
       `}</style>
     </div>
