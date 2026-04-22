@@ -58,6 +58,7 @@ def _process_song_background(song_id: int, file_path: str):
             song_id=song_id,
             file_path=file_path,
             stems_base_dir=str(STEMS_DIR),
+            progress_callback=lambda p: crud.set_progress(db, song_id, p)
         )
 
         crud.set_done(

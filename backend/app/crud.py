@@ -113,6 +113,16 @@ def set_error(db: Session, song_id: int, error_msg: str) -> Optional[Song]:
         db.refresh(song)
     return song
 
+
+def set_progress(db: Session, song_id: int, progress: int) -> Optional[Song]:
+    """Actualiza el porcentaje de progreso de la canción."""
+    song = get_song(db, song_id)
+    if song:
+        song.progress = progress
+        db.commit()
+        db.refresh(song)
+    return song
+
 # ──────────────────────────────────────────────────────────────────────────────
 # DELETE
 # ──────────────────────────────────────────────────────────────────────────────

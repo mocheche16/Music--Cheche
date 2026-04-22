@@ -41,6 +41,7 @@ class SongListItem(BaseModel):
     bpm:           Optional[float] = None
     key:           Optional[str]   = None
     status:        str
+    progress:      int = 0
     created_at:    datetime
 
 
@@ -53,6 +54,7 @@ class SongResponse(BaseModel):
     bpm:           Optional[float] = None
     key:           Optional[str]   = None
     status:        str
+    progress:      int = 0
     error_msg:     Optional[str]   = None
     created_at:    datetime
     updated_at:    datetime
@@ -63,6 +65,7 @@ class SongStatusResponse(BaseModel):
     """Respuesta rápida para polling de estado."""
     id:       int
     status:   str
+    progress: int = 0
     error_msg: Optional[str] = None
 
 

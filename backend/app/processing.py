@@ -91,34 +91,27 @@ def analyze_audio(file_path: str) -> Tuple[float, str]:
 # Separación de Stems con Demucs
 # ──────────────────────────────────────────────────────────────────────────────
 
-def separate_stems(file_path: str, output_dir: str, song_id: int) -> dict:
+def separate_stems(
+    file_path: str,
+    output_dir: str,
+    song_id: int,
+    progress_callback=None
+) -> dict:
     """
     Ejecuta Demucs htdemucs_6s y retorna un dict con las 6 rutas de stems.
-
-    Args:
-        file_path:  Ruta al archivo de audio original.
-        output_dir: Directorio base donde Demucs guardará los stems.
-        song_id:    ID de la canción (usado para construir la ruta de salida).
-
-    Returns:
-        dict con keys: vocals, drums, bass, guitar, piano, other
-        Cada valor es la ruta absoluta al archivo .wav correspondiente.
-
-    Raises:
-        RuntimeError: Si Demucs falla o no genera los archivos esperados.
+    Captura la salida en tiempo real para reportar el progreso.
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"[Demucs] Iniciando separación con modelo {DEMUCS_MODEL}")
+    print(f"[Demucs] Iniciando separación de CALIDAD MÁXIMA (shifts=4)")
     print(f"[Demucs] Input:  {file_path}")
-    print(f"[Demucs] Output: {output_path}")
 
     # ── Construir comando Demucs ───────────────────────────────────────────────
     cmd = [
         sys.executable, "-m", "app.run_demucs",
         "-n", DEMUCS_MODEL,
-        "--shifts", "2",
+        "--shifts", "4",
         "--out", str(output_path),
         str(file_path),
     ]
@@ -127,49 +120,59 @@ def separate_stems(file_path: str, output_dir: str, song_id: int) -> dict:
     try:
         import torch
         if not torch.cuda.is_available():
-            print("[Demucs] GPU no detectada — usando CPU (esto puede tardar varios minutos)")
             cmd.extend(["--device", "cpu"])
         else:
-            gpu_name = torch.cuda.get_device_name(0)
-            print(f"[Demucs] GPU detectada: {gpu_name}")
+            print(f"[Demucs] Usando GPU: {torch.cuda.get_device_name(0)}")
     except ImportError:
-        print("[Demucs] PyTorch no disponible — usando CPU")
         cmd.extend(["--device", "cpu"])
 
-    # ── Ejecutar Demucs ────────────────────────────────────────────────────────
-    result = subprocess.run(
+    # ── Ejecutar Demucs con captura de progreso ───────────────────────────────
+    # tqdm escribe en stderr por defecto. Redirigimos ambos a PIPE.
+    process = subprocess.Popen(
         cmd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         errors="replace",
+        bufsize=1,
+        universal_newlines=True
     )
 
-    if result.returncode != 0:
-        error_detail = result.stderr[-2000:] if result.stderr else "Sin detalles"
-        raise RuntimeError(
-            f"Demucs falló con código {result.returncode}.\n"
-            f"STDERR: {error_detail}"
-        )
+    # Regex para capturar el porcentaje: " 15%|"
+    re_progress = re.compile(r"(\d+)%\|")
+
+    while True:
+        line = process.stdout.readline()
+        if not line and process.poll() is not None:
+            break
+        
+        if line:
+            # Buscar porcentaje en la línea
+            match = re_progress.search(line)
+            if match and progress_callback:
+                percentage = int(match.group(1))
+                progress_callback(percentage)
+            
+            # Print de depuración ocasional si no es la barra de progreso
+            if "%|" not in line:
+                print(f"[Demucs] {line.strip()}")
+
+    if process.returncode != 0:
+        raise RuntimeError(f"Demucs falló con código {process.returncode}.")
 
     print("[Demucs] Separación completada.")
 
     # ── Localizar los archivos generados ──────────────────────────────────────
-    # Demucs genera: {output_dir}/{model}/{track_name}/{stem}.wav
-    input_stem = Path(file_path).stem   # nombre del archivo sin extensión
-
+    input_stem = Path(file_path).stem
     stems_dir = output_path / DEMUCS_MODEL / input_stem
 
     if not stems_dir.exists():
-        # Intento alternativo: buscar en subdirectorios
         candidates = list(output_path.rglob(f"*{input_stem}*"))
         if candidates:
             stems_dir = candidates[0].parent
         else:
-            raise RuntimeError(
-                f"No se encontró el directorio de stems en {output_path}. "
-                f"Verifica que Demucs se ejecutó correctamente."
-            )
+            raise RuntimeError(f"No se encontró el directorio de stems en {output_path}")
 
     expected_stems = ["vocals", "drums", "bass", "guitar", "piano", "other"]
     stems_paths: dict[str, str] = {}
@@ -177,12 +180,8 @@ def separate_stems(file_path: str, output_dir: str, song_id: int) -> dict:
     for stem_name in expected_stems:
         stem_file = stems_dir / f"{stem_name}.wav"
         if not stem_file.exists():
-            raise RuntimeError(
-                f"Stem faltante: {stem_file}. "
-                f"Verifica que el modelo {DEMUCS_MODEL} está correctamente instalado."
-            )
+            raise RuntimeError(f"Stem faltante: {stem_file}")
         stems_paths[stem_name] = str(stem_file.resolve())
-        print(f"[Demucs] ✓ {stem_name}: {stem_file}")
 
     return stems_paths
 
@@ -195,21 +194,21 @@ def run_full_pipeline(
     song_id: int,
     file_path: str,
     stems_base_dir: str,
+    progress_callback=None
 ) -> dict:
     """
     Ejecuta analyze_audio + separate_stems y retorna todos los resultados.
-
-    Returns:
-        {
-          "bpm": float,
-          "key": str,
-          "stems": { "vocals": path, "drums": path, ... }
-        }
     """
     bpm, key = analyze_audio(file_path)
+    
+    # Notificar inicio de Demucs (ej. 5%)
+    if progress_callback:
+        progress_callback(5)
+
     stems = separate_stems(
         file_path=file_path,
         output_dir=stems_base_dir,
         song_id=song_id,
+        progress_callback=progress_callback
     )
     return {"bpm": bpm, "key": key, "stems": stems}

@@ -40,6 +40,7 @@ class Song(Base):
         comment="Estado del pipeline de procesamiento"
     )
     error_msg  = Column(String(1000), nullable=True, comment="Mensaje de error si status=error")
+    progress   = Column(Integer, default=0, nullable=False, comment="Porcentaje de progreso (0-100)")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

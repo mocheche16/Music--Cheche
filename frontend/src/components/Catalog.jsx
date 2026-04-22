@@ -22,13 +22,20 @@ function formatDate(iso) {
   })
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, progress }) {
   const meta = STATUS_META[status] || STATUS_META.pending
   return (
-    <span className={`badge ${meta.cls}`}>
-      {meta.dot && <span className="pulse-dot" />}
-      {meta.label}
-    </span>
+    <div className="status-badge-container">
+      <span className={`badge ${meta.cls}`}>
+        {meta.dot && <span className="pulse-dot" />}
+        {meta.label} {status === 'processing' && progress > 0 ? `${progress}%` : ''}
+      </span>
+      {status === 'processing' && (
+        <div className="progress-mini-bar">
+          <div className="progress-mini-fill" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -72,7 +79,7 @@ export default function Catalog({ onSelectSong, refreshTrigger }) {
     )
     if (!hasProcessing) return
 
-    const interval = setInterval(loadTracks, 5000)
+    const interval = setInterval(loadTracks, 2000) // Polling cada 2s para fluidez
     return () => clearInterval(interval)
   }, [tracks, loadTracks])
 
@@ -155,7 +162,7 @@ export default function Catalog({ onSelectSong, refreshTrigger }) {
                   }
                 </td>
                 <td className="col-status">
-                  <StatusBadge status={track.status} />
+                  <StatusBadge status={track.status} progress={track.progress} />
                 </td>
                 <td className="col-date">{formatDate(track.created_at)}</td>
                 <td className="col-action">
@@ -241,6 +248,21 @@ export default function Catalog({ onSelectSong, refreshTrigger }) {
         }
         .catalog-empty h3 { font-size: 18px; font-weight: 700; color: var(--clr-text-primary); }
         .catalog-error { color: var(--clr-error); }
+        
+        .status-badge-container {
+          display: flex; flex-direction: column; gap: 6px; min-width: 100px;
+        }
+        .progress-mini-bar {
+          height: 4px; width: 100%;
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 2px; overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .progress-mini-fill {
+          height: 100%; background: var(--clr-primary-glow);
+          box-shadow: 0 0 8px var(--clr-primary-glow);
+          transition: width 0.4s ease;
+        }
       `}</style>
     </div>
   )
