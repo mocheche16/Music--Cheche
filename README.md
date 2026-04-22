@@ -1,7 +1,17 @@
 # 🎛️ Music Hub — Hub de Análisis y Separación Musical
 
+**Autor:** Mocheche
+
+## 🚀 Nuevas Funcionalidades (Versión Pro)
+- **Separación de 6 Stems:** Voces, Batería, Bajo, Guitarra, Piano y Otros.
+- **Máxima Calidad de Audio:** Procesamiento con `--shifts 4` para una separación cristalina y sin artefactos.
+- **Barra de Progreso Real:** Visualización en tiempo real del porcentaje de avance de la IA.
+- **Audio Multitarea:** Sigue escuchando tus mezclas mientras navegas por el catálogo o subes nuevos archivos (Mini Reproductor).
+- **Exportación Versátil:** Descarga stems individuales en WAV o paquetes completos en ZIP (WAV o MP3 convertido al vuelo).
+- **Mixer Avanzado:** Control total de volumen, mute y solo con interfaz premium.
+
 ## Stack
-- **Backend**: Python · FastAPI · Demucs (htdemucs_6s) · Librosa
+- **Backend**: Python · FastAPI · Demucs (htdemucs_6s) · Librosa · Soundfile (MP3 Encoder)
 - **Base de Datos**: MySQL + SQLAlchemy
 - **Frontend**: React + Vite · Web Audio API
 - **DAW**: REAPER (ReaScript Python)
@@ -16,28 +26,25 @@ Music Cheche/
 │   ├── app/
 │   │   ├── main.py          # FastAPI entry point
 │   │   ├── database.py      # SQLAlchemy + MySQL
-│   │   ├── models.py        # Tabla songs
+│   │   ├── models.py        # Tabla songs (incluye progreso)
 │   │   ├── schemas.py       # Pydantic schemas
 │   │   ├── crud.py          # Operaciones DB
-│   │   ├── processing.py    # Demucs + Librosa
+│   │   ├── processing.py    # Demucs (Shifts 4) + Librosa
 │   │   └── routers/
-│   │       └── tracks.py    # Endpoints REST
+│   │       └── tracks.py    # Endpoints ZIP, MP3 y Export
 │   ├── uploads/             # Archivos subidos
 │   ├── stems/               # Stems generados
 │   ├── requirements.txt
-│   └── .env                 # Configuración (editar esto primero)
+│   └── .env                 # Configuración
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   ├── index.css
+│   │   ├── App.jsx          # Lógica global de audio
 │   │   ├── api/client.js
-│   │   ├── hooks/useAudioEngine.js
-│   │   └── components/
-│   │       ├── UploadZone.jsx
-│   │       ├── Catalog.jsx
-│   │       ├── ChannelStrip.jsx
-│   │       └── MixerDashboard.jsx
+│   │   ├── components/
+│   │   │   ├── MiniPlayer.jsx       # Reproductor persistente
+│   │   │   ├── Catalog.jsx          # Con barra de progreso
+│   │   │   ├── MixerDashboard.jsx   # Botones de exportación masiva
+│   │   │   └── ...
 │   ├── package.json
 │   └── vite.config.js
 └── reaper_script/
@@ -50,17 +57,12 @@ Music Cheche/
 
 ### 1. MySQL — Crear la Base de Datos
 
-Abre MySQL y ejecuta:
+Abre MySQL (XAMPP) y ejecuta:
 ```sql
 CREATE DATABASE music_hub CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-Edita `backend/.env` con tus credenciales:
-```env
-DB_USER=root
-DB_PASSWORD=tu_contraseña
-DB_NAME=music_hub
-```
+Edita `backend/.env` con tus credenciales.
 
 ---
 
@@ -70,100 +72,47 @@ DB_NAME=music_hub
 # Ir a la carpeta del backend
 cd "d:\Desarrollo\Music Cheche\backend"
 
-# Crear entorno virtual
+# Crear e instalar entorno
 python -m venv venv
-
-# Activar entorno virtual (Windows PowerShell)
 .\venv\Scripts\Activate.ps1
 
-# Instalar PyTorch PRIMERO (elige según tu hardware):
-
-# ─── OPCIÓN A: Con GPU NVIDIA (CUDA 12.1) — recomendado ───────────────────
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# ─── OPCIÓN B: Solo CPU (más lento, ~15-30 min por canción) ───────────────
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-# Instalar el resto de dependencias
+# Instalar PyTorch y dependencias
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121  # O cpu si no tienes NVIDIA
 pip install -r requirements.txt
 
 # Arrancar el servidor
-python -m app.main
+$env:PYTHONUTF8=1; python -m app.main
 ```
-
-El servidor estará disponible en: http://localhost:8000
-Documentación interactiva: http://localhost:8000/docs
 
 ---
 
 ### 3. Frontend — React
 
 ```powershell
-# Abrir una nueva terminal
 cd "d:\Desarrollo\Music Cheche\frontend"
-
-# Instalar dependencias
 npm install
-
-# Arrancar en modo desarrollo
 npm run dev
 ```
 
-La app web estará en: http://localhost:5173
-
 ---
 
-### 4. Demucs — Primera ejecución (descarga del modelo)
+## 🎮 Uso Avanzado
 
-La primera vez que subas una canción, Demucs descargará automáticamente
-el modelo `htdemucs_6s` (~1.5 GB). Asegúrate de tener conexión a internet.
+### Exportación
+- **Individual:** En el mixer, haz clic en `⬇️ WAV` de cualquier canal.
+- **Masiva (ZIP):** Usa los botones `📦 WAV` o `📦 MP3` en la cabecera del mixer para bajar todo el proyecto comprimido.
 
----
-
-## 🎮 Uso
-
-### Flujo básico:
-1. Abre http://localhost:5173
-2. Haz clic en **"+ Subir Canción"**
-3. Arrastra tu MP3/WAV al área de carga
-4. Espera el procesamiento (5-30 min según GPU/CPU)
-5. Haz clic en **"🎛️ Mixer"** en el catálogo
-6. ¡Practica con los 6 stems sincronizados!
-
-### API REST:
-| Endpoint | Descripción |
-|----------|-------------|
-| `POST /upload` | Subir archivo de audio |
-| `GET /tracks` | Listar catálogo |
-| `GET /tracks/{id}` | Detalles + rutas de stems |
-| `GET /tracks/{id}/status` | Polling de estado |
-| `GET /stems/{id}/{stem}` | Streaming del WAV |
-
----
-
-## 🎛️ REAPER — Importar Stems
-
-1. Copia `reaper_script/import_stems.py` a `%APPDATA%\REAPER\Scripts\`
-2. Edita las credenciales de MySQL al inicio del script
-3. En REAPER: **Actions → Show action list → New action → Load ReaScript**
-4. Selecciona el archivo y ejecuta (o asigna un atajo de teclado)
-
-El script automáticamente:
-- Detecta la canción más reciente procesada
-- Ajusta el BPM del proyecto de REAPER
-- Crea 6 tracks con los stems importados al inicio de la línea de tiempo
-- Mutea cualquier track de referencia existente
+### Multitarea
+- Puedes darle a **Reproducir** en el mixer y luego **Minimizar** (atrás).
+- Aparecerá una barra inferior con el control de la música.
+- Mientras suena, puedes ir a **Subir Canción** y cargar nuevos archivos sin interrupciones.
 
 ---
 
 ## 🔧 Troubleshooting
 
-### "No module named 'demucs'"
-```powershell
-# Asegúrate de que el entorno virtual está activado
-.\venv\Scripts\Activate.ps1
-pip install demucs
-```
+### Incompatibilidad `torchcodec` en Windows
+El proyecto incluye un **monkey-patch automático** en `backend/app/run_demucs.py` que soluciona errores de carga de audio en Windows usando `soundfile` como backend alternativo. No necesitas instalar nada adicional.
 
 ### "Access denied for user 'root'"
 - Verifica que MySQL está corriendo
