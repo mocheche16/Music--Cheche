@@ -375,3 +375,53 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
 .toast-success { border-left: 3px solid var(--clr-success); }
 .toast-error   { border-left: 3px solid var(--clr-error); }
 .toast-info    { border-left: 3px solid var(--clr-primary); }
+
+/* ── Responsive Design (Mobile) ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-header .header-inner {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  
+  .page-title {
+    font-size: 32px;
+  }
+
+  .catalog-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .data-table th, .data-table td {
+    padding: 12px 8px;
+    font-size: 13px;
+  }
+
+  .col-date {
+    display: none; /* Hide date on mobile to save space */
+  }
+
+  /* Mixer channels scrolling on mobile */
+  .channels-container {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    padding: 16px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .channel-strip {
+    min-width: 120px;
+    scroll-snap-align: center;
+  }
+
+  .mixer-panel {
+    padding-bottom: 24px;
+  }
+  
+  .transport-buttons {
+    flex-wrap: wrap;
+  }
+}

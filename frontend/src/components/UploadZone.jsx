@@ -52,6 +52,14 @@ export default function UploadZone({ onUploadComplete }) {
       return
     }
 
+    // Validar tamaño (50MB = 50 * 1024 * 1024 bytes)
+    const MAX_SIZE = 50 * 1024 * 1024
+    if (selectedFile.size > MAX_SIZE) {
+      setPhase('error')
+      setStatusMsg('El archivo es demasiado grande. El límite es de 50MB.')
+      return
+    }
+
     setFile(selectedFile)
     setPhase('uploading')
     setUploadProgress(0)

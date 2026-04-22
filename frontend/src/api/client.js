@@ -37,6 +37,8 @@ export const fetchTrack  = (id) => api.get(`/tracks/${id}`)
 
 export const fetchStatus = (id) => api.get(`/tracks/${id}/status`)
 
+export const deleteTrack = (id) => api.delete(`/tracks/${id}`)
+
 // ── URL de stems para Web Audio API ───────────────────────────────────────
 export const getStemUrl = (songId, stemName) =>
   `/stems/${songId}/${stemName}`

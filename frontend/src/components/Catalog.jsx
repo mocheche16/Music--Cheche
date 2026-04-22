@@ -6,7 +6,7 @@
  * Soporta polling automático para canciones en procesamiento.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { fetchTracks } from '../api/client'
+import { fetchTracks, deleteTrack } from '../api/client'
 
 const STATUS_META = {
   pending:    { label: 'En espera',     cls: 'badge-pending',    dot: false },
@@ -48,6 +48,19 @@ export default function Catalog({ onSelectSong, refreshTrigger }) {
       setLoading(false)
     }
   }, [])
+
+  const handleDelete = async (trackId, e) => {
+    e.stopPropagation()
+    if (!window.confirm('¿Estás seguro de que quieres eliminar esta canción y sus archivos?')) return
+    
+    try {
+      await deleteTrack(trackId)
+      setTracks(prev => prev.filter(t => t.id !== trackId))
+      if (refreshTrigger) refreshTrigger(Date.now()) // Optional: trigger any parent refresh if needed
+    } catch (err) {
+      alert(`Error al eliminar: ${err.message}`)
+    }
+  }
 
   // Carga inicial y cuando se sube una canción nueva
   useEffect(() => { loadTracks() }, [loadTracks, refreshTrigger])
@@ -146,17 +159,26 @@ export default function Catalog({ onSelectSong, refreshTrigger }) {
                 </td>
                 <td className="col-date">{formatDate(track.created_at)}</td>
                 <td className="col-action">
-                  {track.status === 'done' ? (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {track.status === 'done' ? (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={(e) => { e.stopPropagation(); onSelectSong?.(track) }}
+                        id={`btn-open-mixer-${track.id}`}
+                      >
+                        🎛️ Mixer
+                      </button>
+                    ) : (
+                      <span className="col-empty" style={{ flex: 1 }}>—</span>
+                    )}
                     <button
-                      className="btn btn-primary btn-sm"
-                      onClick={(e) => { e.stopPropagation(); onSelectSong?.(track) }}
-                      id={`btn-open-mixer-${track.id}`}
+                      className="btn btn-danger btn-sm"
+                      onClick={(e) => handleDelete(track.id, e)}
+                      title="Eliminar canción"
                     >
-                      🎛️ Mixer
+                      🗑️
                     </button>
-                  ) : (
-                    <span className="col-empty">—</span>
-                  )}
+                  </div>
                 </td>
               </tr>
             ))}

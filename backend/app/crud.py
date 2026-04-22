@@ -112,3 +112,16 @@ def set_error(db: Session, song_id: int, error_msg: str) -> Optional[Song]:
         db.commit()
         db.refresh(song)
     return song
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DELETE
+# ──────────────────────────────────────────────────────────────────────────────
+
+def delete_song(db: Session, song_id: int) -> bool:
+    """Elimina la canción de la base de datos."""
+    song = get_song(db, song_id)
+    if song:
+        db.delete(song)
+        db.commit()
+        return True
+    return False

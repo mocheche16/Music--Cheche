@@ -102,6 +102,14 @@ async def upload_song(
             detail=f"Tipo de archivo no soportado: '{suffix}'. Usa: {ALLOWED_EXT}",
         )
 
+    # Validar tamaño (máx 50MB)
+    MAX_SIZE = 50 * 1024 * 1024  # 50 MB
+    if file.size and file.size > MAX_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="El archivo excede el límite de 50MB.",
+        )
+
     # Guardar archivo en disco
     safe_name = Path(file.filename).name
     dest_path = UPLOADS_DIR / safe_name
@@ -153,6 +161,46 @@ def list_tracks(
 ):
     """Retorna todas las canciones del catálogo, ordenadas por fecha descendente."""
     return crud.get_all_songs(db, skip=skip, limit=limit)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DELETE /tracks/{id}
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.delete(
+    "/tracks/{song_id}",
+    summary="Eliminar una canción y sus archivos físicos",
+)
+def delete_track(song_id: int, db: Session = Depends(get_db)):
+    """
+    Elimina la canción de la base de datos y borra el archivo
+    original subido y los stems generados del disco duro.
+    """
+    song = crud.get_song(db, song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="Canción no encontrada")
+
+    # 1. Eliminar archivo original
+    if song.original_path and Path(song.original_path).exists():
+        try:
+            Path(song.original_path).unlink()
+        except Exception as e:
+            print(f"[Delete] Error borrando original: {e}")
+
+    # 2. Eliminar stems
+    for stem_path in song.stems_dict.values():
+        if stem_path and Path(stem_path).exists():
+            try:
+                Path(stem_path).unlink()
+            except Exception as e:
+                print(f"[Delete] Error borrando stem: {e}")
+
+    # 3. Eliminar de DB
+    success = crud.delete_song(db, song_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Error al eliminar registro de DB")
+
+    return {"message": "Canción y archivos eliminados exitosamente"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
