@@ -1,84 +1,73 @@
-"""
-schemas.py — Schemas Pydantic para validación de request/response en FastAPI
-"""
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Stems
-# ──────────────────────────────────────────────────────────────────────────────
-
 class StemsResponse(BaseModel):
-    """URLs de acceso a los 6 stems vía el endpoint /stems/."""
-    vocals: Optional[str] = None
-    drums:  Optional[str] = None
-    bass:   Optional[str] = None
-    guitar: Optional[str] = None
-    piano:  Optional[str] = None
-    other:  Optional[str] = None
+    vocals: str | None = None
+    drums: str | None = None
+    bass: str | None = None
+    guitar: str | None = None
+    piano: str | None = None
+    other: str | None = None
+    tempo: str | None = None
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Song
-# ──────────────────────────────────────────────────────────────────────────────
 
 class SongBase(BaseModel):
     original_name: str
 
 
-class SongCreate(SongBase):
+class SongCreate(BaseModel):
+    original_name: str
     original_path: str
+    file_hash: str | None = None
 
 
 class SongListItem(BaseModel):
-    """Versión compacta de una canción para el catálogo/tabla."""
     model_config = ConfigDict(from_attributes=True)
 
-    id:            int
+    id: int
     original_name: str
-    bpm:           Optional[float] = None
-    key:           Optional[str]   = None
-    status:        str
-    progress:      int = 0
-    duration_seconds: Optional[int] = None
-    created_at:    datetime
+    bpm: float | None = None
+    key: str | None = None
+    status: str
+    progress: int = 0
+    processing_time: int | None = None
+    created_at: datetime
 
 
 class SongResponse(BaseModel):
-    """Respuesta completa con metadatos + URLs de los 6 stems."""
     model_config = ConfigDict(from_attributes=True)
 
-    id:            int
+    id: int
     original_name: str
-    bpm:           Optional[float] = None
-    key:           Optional[str]   = None
-    status:        str
-    progress:      int = 0
-    duration_seconds: Optional[int] = None
-    error_msg:     Optional[str]   = None
-    processing_time: Optional[int] = None
-    created_at:    datetime
-    updated_at:    datetime
-    stems:         Optional[StemsResponse] = None
+    bpm: float | None = None
+    key: str | None = None
+    status: str
+    progress: int = 0
+    error_msg: str | None = None
+    processing_time: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    stems: StemsResponse | None = None
 
 
 class SongStatusResponse(BaseModel):
-    """Respuesta rápida para polling de estado."""
-    id:       int
-    status:   str
+    id: int
+    status: str
     progress: int = 0
-    processing_time: Optional[int] = None
-    error_msg: Optional[str] = None
+    processing_time: int | None = None
+    error_msg: str | None = None
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Upload
-# ──────────────────────────────────────────────────────────────────────────────
 
 class UploadResponse(BaseModel):
-    """Respuesta inmediata al hacer POST /upload."""
     song_id: int
     message: str
-    status:  str
+    status: str
+
+
+class PaginatedResponse(BaseModel):
+    items: list[SongListItem]
+    total: int
+    skip: int
+    limit: int

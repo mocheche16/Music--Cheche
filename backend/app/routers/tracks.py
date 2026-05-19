@@ -1,92 +1,92 @@
-"""
-routers/tracks.py — Endpoints REST de la API
-"""
-import os
-import traceback
+import hashlib
 import io
+import os
+import time
+import traceback
 import zipfile
-import soundfile as sf
 from pathlib import Path
-from typing import List, Optional
 
-from fastapi import (
-    APIRouter, BackgroundTasks, Depends, File, HTTPException,
-    UploadFile, status
-)
+import soundfile as sf
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy.orm import Session
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
 from app.database import get_db
+from app.exceptions import BadRequestError, NotFoundError
 from app.models import ProcessingStatus
 from app.processing import run_full_pipeline
 from app.schemas import (
-    SongListItem, SongResponse, SongStatusResponse,
-    SongCreate, StemsResponse, UploadResponse
+    PaginatedResponse,
+    SongCreate,
+    SongListItem,
+    SongResponse,
+    SongStatusResponse,
+    StemsResponse,
+    UploadResponse,
 )
 
 router = APIRouter()
 
-# ── Config ────────────────────────────────────────────────────────────────────
 UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", "uploads")).resolve()
-STEMS_DIR   = Path(os.getenv("STEMS_DIR",   "stems")).resolve()
+STEMS_DIR = Path(os.getenv("STEMS_DIR", "stems")).resolve()
 ALLOWED_EXT = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
+MAX_SIZE = 50 * 1024 * 1024
 
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 STEMS_DIR.mkdir(parents=True, exist_ok=True)
 
+STEM_FIELD_MAP = {
+    "vocals": "vocals_path",
+    "drums": "drums_path",
+    "bass": "bass_path",
+    "guitar": "guitar_path",
+    "piano": "piano_path",
+    "other": "other_path",
+}
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Background Task — Pipeline de procesamiento
-# ──────────────────────────────────────────────────────────────────────────────
 
 def _process_song_background(song_id: int, file_path: str):
-    """
-    Tarea en segundo plano: corre Librosa + Demucs y actualiza la DB.
-    Se ejecuta en un hilo separado (FastAPI BackgroundTasks).
-    """
-    from app.database import SessionLocal
+    from app.database import async_session as _session
 
-    db = SessionLocal()
-    try:
-        crud.set_processing(db, song_id)
-        print(f"\n{'='*60}")
-        print(f"[Pipeline] Iniciando procesamiento — Song ID: {song_id}")
-        print(f"{'='*60}")
-        start_time = time.time()
-        
-        result = run_full_pipeline(
-            song_id=song_id,
-            file_path=file_path,
-            stems_base_dir=str(STEMS_DIR),
-            progress_callback=lambda p: crud.set_progress(db, song_id, p)
-        )
+    async def _run():
+        async with _session() as db:
+            try:
+                await crud.set_processing(db, song_id)
+                logger.info(f"[Pipeline] Iniciando procesamiento — Song ID: {song_id}")
+                start_time = time.time()
 
-        end_time = time.time()
-        duration = int(end_time - start_time)
+                result = run_full_pipeline(
+                    song_id=song_id,
+                    file_path=file_path,
+                    stems_base_dir=str(STEMS_DIR),
+                    progress_callback=lambda p: None,
+                )
 
-        crud.set_processing_time(db, song_id, duration)
-        
-        crud.set_done(
-            db=db,
-            song_id=song_id,
-            bpm=result["bpm"],
-            key=result["key"],
-            stems_paths=result["stems"],
-        )
-        print(f"[Pipeline] ✅ Song {song_id} completada — BPM={result['bpm']:.1f}, Key={result['key']}")
+                duration = int(time.time() - start_time)
 
-    except Exception as exc:
-        error_msg = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
-        print(f"[Pipeline] ❌ Error en Song {song_id}:\n{error_msg}")
-        crud.set_error(db, song_id, str(exc))
-    finally:
-        db.close()
+                await crud.set_processing_time(db, song_id, duration)
+                await crud.set_done(
+                    db=db,
+                    song_id=song_id,
+                    bpm=result["bpm"],
+                    key=result["key"],
+                    stems=result["stems"],
+                )
+                logger.info(
+                    f"[Pipeline] Song {song_id} completada — "
+                    f"BPM={result['bpm']:.1f}, Key={result['key']}"
+                )
+            except Exception as exc:
+                error_msg = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+                logger.error(f"[Pipeline] Error en Song {song_id}:\n{error_msg}")
+                await crud.set_error(db, song_id, str(exc))
 
+    import asyncio
 
-# ──────────────────────────────────────────────────────────────────────────────
-# POST /upload
-# ──────────────────────────────────────────────────────────────────────────────
+    asyncio.run(_run())
+
 
 @router.post(
     "/upload",
@@ -97,51 +97,53 @@ def _process_song_background(song_id: int, file_path: str):
 async def upload_song(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Acepta un archivo MP3/WAV, lo guarda en disco, crea el registro en DB
-    con status=pending y lanza el pipeline de procesamiento en segundo plano.
-    Retorna inmediatamente con el song_id para hacer polling de estado.
-    """
-    # Validar extensión
     suffix = Path(file.filename).suffix.lower()
     if suffix not in ALLOWED_EXT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tipo de archivo no soportado: '{suffix}'. Usa: {ALLOWED_EXT}",
+        raise BadRequestError(
+            f"Tipo de archivo no soportado: '{suffix}'. Usa: {ALLOWED_EXT}"
         )
 
-    # Validar tamaño (máx 50MB)
-    MAX_SIZE = 50 * 1024 * 1024  # 50 MB
-    if file.size and file.size > MAX_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="El archivo excede el límite de 50MB.",
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise BadRequestError("El archivo excede el límite de 50MB.")
+
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    existing_song = await crud.get_song_by_hash(db, file_hash)
+    if existing_song:
+        logger.info(f"[Upload] Duplicado detectado (Hash: {file_hash[:10]}...)")
+        return UploadResponse(
+            song_id=existing_song.id,
+            message="Este archivo ya fue procesado anteriormente.",
+            status="done",
         )
 
-    # Guardar archivo en disco
     safe_name = Path(file.filename).name
     dest_path = UPLOADS_DIR / safe_name
-
-    # Evitar colisiones de nombre
     counter = 1
     while dest_path.exists():
         stem_part = Path(file.filename).stem
         dest_path = UPLOADS_DIR / f"{stem_part}_{counter}{suffix}"
         counter += 1
 
-    content = await file.read()
-    dest_path.write_bytes(content)
-    print(f"[Upload] Guardado: {dest_path} ({len(content)/1024/1024:.1f} MB)")
+    import anyio
+    await anyio.to_thread.run_sync(dest_path.write_bytes, content)
 
-    # Crear registro en DB
-    song = crud.create_song(db, SongCreate(
-        original_name=file.filename,
-        original_path=str(dest_path),
-    ))
+    logger.info(
+        f"[Upload] Guardado: {dest_path} ({len(content) / 1024 / 1024:.1f} MB)"
+    )
 
-    # Lanzar pipeline en background
+    song = await crud.create_song(
+        db,
+        SongCreate(
+            original_name=file.filename,
+            original_path=str(dest_path),
+            file_hash=file_hash,
+        ),
+    )
+
     background_tasks.add_task(
         _process_song_background,
         song_id=song.id,
@@ -150,95 +152,81 @@ async def upload_song(
 
     return UploadResponse(
         song_id=song.id,
-        message="Archivo recibido. Procesamiento iniciado en segundo plano.",
+        message="Archivo recibido. Procesamiento iniciado.",
         status="pending",
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# GET /tracks
-# ──────────────────────────────────────────────────────────────────────────────
-
 @router.get(
     "/tracks",
-    response_model=List[SongListItem],
+    response_model=PaginatedResponse,
     summary="Listar el catálogo de canciones",
 )
-def list_tracks(
+async def list_tracks(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Retorna todas las canciones del catálogo, ordenadas por fecha descendente."""
-    return crud.get_all_songs(db, skip=skip, limit=limit)
+    songs, total = await crud.get_all_songs(db, skip=skip, limit=limit)
+    items = [SongListItem.model_validate(s) for s in songs]
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# DELETE /tracks/{id}
-# ──────────────────────────────────────────────────────────────────────────────
 
 @router.delete(
     "/tracks/{song_id}",
     summary="Eliminar una canción y sus archivos físicos",
 )
-def delete_track(song_id: int, db: Session = Depends(get_db)):
-    """
-    Elimina la canción de la base de datos y borra el archivo
-    original subido y los stems generados del disco duro.
-    """
-    song = crud.get_song(db, song_id)
+async def delete_track(
+    song_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    song = await crud.get_song(db, song_id)
     if not song:
-        raise HTTPException(status_code=404, detail="Canción no encontrada")
+        raise NotFoundError("Canción no encontrada")
 
-    # 1. Eliminar archivo original
     if song.original_path and Path(song.original_path).exists():
         try:
             Path(song.original_path).unlink()
         except Exception as e:
-            print(f"[Delete] Error borrando original: {e}")
+            logger.warning(f"[Delete] Error borrando original: {e}")
 
-    # 2. Eliminar stems
     for stem_path in song.stems_dict.values():
         if stem_path and Path(stem_path).exists():
             try:
                 Path(stem_path).unlink()
             except Exception as e:
-                print(f"[Delete] Error borrando stem: {e}")
+                logger.warning(f"[Delete] Error borrando stem: {e}")
 
-    # 3. Eliminar de DB
-    success = crud.delete_song(db, song_id)
+    success = await crud.delete_song(db, song_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Error al eliminar registro de DB")
+        raise BadRequestError("Error al eliminar registro de DB")
 
     return {"message": "Canción y archivos eliminados exitosamente"}
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# GET /tracks/{id}
-# ──────────────────────────────────────────────────────────────────────────────
 
 @router.get(
     "/tracks/{song_id}",
     response_model=SongResponse,
     summary="Obtener detalle de una canción",
 )
-def get_track(song_id: int, db: Session = Depends(get_db)):
-    """Retorna los metadatos completos + URLs de los 6 stems."""
-    song = crud.get_song(db, song_id)
+async def get_track(
+    song_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    song = await crud.get_song(db, song_id)
     if not song:
-        raise HTTPException(status_code=404, detail=f"Canción {song_id} no encontrada.")
+        raise NotFoundError(f"Canción {song_id} no encontrada.")
 
-    # Construir URLs de stems (apuntan al endpoint /stems/)
     base = f"/stems/{song_id}"
     stems = None
     if song.status == ProcessingStatus.done:
         stems = StemsResponse(
             vocals=f"{base}/vocals" if song.vocals_path else None,
-            drums =f"{base}/drums"  if song.drums_path  else None,
-            bass  =f"{base}/bass"   if song.bass_path   else None,
+            drums=f"{base}/drums" if song.drums_path else None,
+            bass=f"{base}/bass" if song.bass_path else None,
             guitar=f"{base}/guitar" if song.guitar_path else None,
-            piano =f"{base}/piano"  if song.piano_path  else None,
-            other =f"{base}/other"  if song.other_path  else None,
+            piano=f"{base}/piano" if song.piano_path else None,
+            other=f"{base}/other" if song.other_path else None,
         )
 
     return SongResponse(
@@ -248,74 +236,61 @@ def get_track(song_id: int, db: Session = Depends(get_db)):
         key=song.key,
         status=song.status,
         error_msg=song.error_msg,
+        progress=song.progress,
+        processing_time=song.processing_time,
         created_at=song.created_at,
         updated_at=song.updated_at,
         stems=stems,
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# GET /tracks/{id}/status  (polling de estado)
-# ──────────────────────────────────────────────────────────────────────────────
-
 @router.get(
     "/tracks/{song_id}/status",
     response_model=SongStatusResponse,
     summary="Consultar el estado del procesamiento",
 )
-def get_track_status(song_id: int, db: Session = Depends(get_db)):
-    """Endpoint ligero para hacer polling mientras Demucs procesa."""
-    song = crud.get_song(db, song_id)
+async def get_track_status(
+    song_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    song = await crud.get_song(db, song_id)
     if not song:
-        raise HTTPException(status_code=404, detail=f"Canción {song_id} no encontrada.")
-    return SongStatusResponse(id=song.id, status=song.status, error_msg=song.error_msg)
+        raise NotFoundError(f"Canción {song_id} no encontrada.")
+    return SongStatusResponse(
+        id=song.id,
+        status=song.status,
+        progress=song.progress,
+        error_msg=song.error_msg,
+    )
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# GET /stems/{song_id}/{stem_name}  (streaming de archivos WAV)
-# ──────────────────────────────────────────────────────────────────────────────
-
-STEM_FIELD_MAP = {
-    "vocals": "vocals_path",
-    "drums":  "drums_path",
-    "bass":   "bass_path",
-    "guitar": "guitar_path",
-    "piano":  "piano_path",
-    "other":  "other_path",
-}
 
 @router.get(
     "/stems/{song_id}/{stem_name}",
-    summary="Servir un archivo WAV de stem para el reproductor web",
+    summary="Servir un archivo WAV de stem",
 )
-def serve_stem(song_id: int, stem_name: str, db: Session = Depends(get_db)):
-    """
-    Retorna el archivo WAV del stem solicitado para que el browser
-    lo cargue via Web Audio API.
-    """
+async def serve_stem(
+    song_id: int,
+    stem_name: str,
+    db: AsyncSession = Depends(get_db),
+):
     if stem_name not in STEM_FIELD_MAP:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Stem inválido: '{stem_name}'. Opciones: {list(STEM_FIELD_MAP.keys())}",
+        raise BadRequestError(
+            f"Stem inválido: '{stem_name}'. Opciones: {list(STEM_FIELD_MAP.keys())}"
         )
 
-    song = crud.get_song(db, song_id)
+    song = await crud.get_song(db, song_id)
     if not song:
-        raise HTTPException(status_code=404, detail=f"Canción {song_id} no encontrada.")
+        raise NotFoundError(f"Canción {song_id} no encontrada.")
     if song.status != ProcessingStatus.done:
-        raise HTTPException(
-            status_code=409,
-            detail=f"La canción no ha terminado de procesar. Estado: {song.status}",
+        raise BadRequestError(
+            f"La canción no ha terminado de procesar. Estado: {song.status}"
         )
 
     field_name = STEM_FIELD_MAP[stem_name]
-    file_path  = getattr(song, field_name)
+    file_path = getattr(song, field_name)
 
     if not file_path or not Path(file_path).exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Archivo de stem '{stem_name}' no encontrado en disco.",
-        )
+        raise NotFoundError(f"Archivo de stem '{stem_name}' no encontrado en disco.")
 
     return FileResponse(
         path=file_path,
@@ -323,46 +298,37 @@ def serve_stem(song_id: int, stem_name: str, db: Session = Depends(get_db)):
         filename=f"{song.original_name}_{stem_name}.wav",
         headers={"Accept-Ranges": "bytes"},
     )
-# ──────────────────────────────────────────────────────────────────────────────
-# GET /tracks/{id}/export-all
-# ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/tracks/{song_id}/export-all",
     summary="Exportar todos los stems en un archivo ZIP (WAV o MP3)",
 )
-def export_all_stems(
+async def export_all_stems(
     song_id: int,
     format: str = "wav",
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Busca los stems de la canción, los comprime en un ZIP y los retorna.
-    Si format='mp3', los convierte al vuelo antes de comprimir.
-    """
-    song = crud.get_song(db, song_id)
+    song = await crud.get_song(db, song_id)
     if not song or song.status != ProcessingStatus.done:
-        raise HTTPException(status_code=404, detail="Canción no encontrada o no procesada")
+        raise NotFoundError("Canción no encontrada o no procesada")
 
-    # Mapeo de nombres amigables para los archivos dentro del ZIP
     stem_labels = {
         "vocals": "Voces",
         "drums": "Bateria",
         "bass": "Bajo",
         "guitar": "Guitarra",
         "piano": "Piano",
-        "other": "Otros"
+        "other": "Otros",
     }
 
-    # Preparar el archivo ZIP en memoria
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for stem_key, label in stem_labels.items():
-            # Obtener el path del stem desde el objeto song
             path_str = getattr(song, f"{stem_key}_path", None)
             if not path_str:
                 continue
-            
+
             path = Path(path_str)
             if not path.exists():
                 continue
@@ -370,27 +336,29 @@ def export_all_stems(
             filename = f"{label}.{format}"
 
             if format.lower() == "mp3":
-                # Convertir WAV a MP3 al vuelo usando soundfile
                 try:
                     data, samplerate = sf.read(path)
                     mp3_io = io.BytesIO()
-                    sf.write(mp3_io, data, samplerate, format='MP3')
-                    zip_file.writestr(filename, mp3_io.getvalue())
+                    try:
+                        sf.write(mp3_io, data, samplerate, format="MP3")
+                        zip_file.writestr(filename, mp3_io.getvalue())
+                    except Exception:
+                        zip_file.write(path, arcname=f"{label}.wav")
                 except Exception as e:
-                    print(f"[Export] Error convirtiendo {stem_key} a MP3: {e}")
-                    # Si falla la conversión, intentamos meter el WAV original
+                    logger.warning(f"[Export] Error convirtiendo {stem_key}: {e}")
                     zip_file.write(path, arcname=f"{label}.wav")
             else:
-                # Añadir el WAV original directamente
                 zip_file.write(path, arcname=filename)
 
     zip_buffer.seek(0)
-    
-    clean_name = "".join(c for c in song.original_name if c.isalnum() or c in (" ", "_", "-")).strip()
+
+    clean_name = "".join(
+        c for c in song.original_name if c.isalnum() or c in (" ", "_", "-")
+    ).strip()
     zip_filename = f"Stems_{clean_name}_{format.upper()}.zip"
 
     return StreamingResponse(
         zip_buffer,
-        media_type="application/x-zip-compressed",
-        headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
     )

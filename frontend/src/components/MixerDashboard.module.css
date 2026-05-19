@@ -1,0 +1,271 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 11, 20, 0.92);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.panel {
+  width: 100%;
+  max-width: 1100px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 0;
+  border: 1px solid var(--clr-border-bright);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  background: var(--clr-bg-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: var(--radius-xl);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--clr-border);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.headerActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.exportBtn {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--clr-border-bright);
+}
+
+.exportBtn:hover {
+  background: rgba(108, 99, 255, 0.1);
+  color: var(--clr-primary-light);
+  border-color: var(--clr-primary-glow);
+}
+
+.songInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.backBtn {
+  white-space: nowrap;
+}
+
+.songTitle {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  max-width: 500px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.songMeta {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.metaPill {
+  background: var(--clr-bg-elevated);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-full);
+  padding: 2px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--clr-text-secondary);
+}
+
+.reaperMsg {
+  padding: 10px 28px;
+  font-size: 13px;
+  font-weight: 500;
+  border-top: 1px solid var(--clr-border);
+}
+
+.reaperSuccess {
+  color: var(--clr-success);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.reaperInfo {
+  color: var(--clr-accent);
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.loading,
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px;
+  text-align: center;
+  color: var(--clr-text-secondary);
+}
+
+.loadingHint {
+  font-size: 12px;
+  color: var(--clr-text-muted);
+}
+
+.error {
+  color: var(--clr-error);
+}
+
+.channels {
+  display: flex;
+  gap: 12px;
+  padding: 24px;
+  overflow-x: auto;
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .channels {
+    flex-wrap: wrap;
+  }
+}
+
+.transport {
+  padding: 16px 28px 24px;
+  border-top: 1px solid var(--clr-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  justify-content: center;
+  color: var(--clr-text-secondary);
+}
+
+.timeSep {
+  color: var(--clr-text-muted);
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.playBtn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: var(--grad-primary);
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px var(--clr-primary-glow);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.playBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 28px var(--clr-primary-glow);
+}
+
+.playBtn:active {
+  transform: scale(0.96);
+}
+
+.masterControls {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 20px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--clr-border);
+  margin: 0 12px;
+}
+
+.masterGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.controlLabel {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--clr-text-muted);
+}
+
+.pitchSelector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pitchBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--clr-border);
+  background: var(--clr-bg-elevated);
+  color: white;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.pitchBtn:hover {
+  background: var(--clr-primary);
+  border-color: var(--clr-primary-light);
+}
+
+.pitchValue {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 28px;
+  text-align: center;
+}
+
+.speedSelector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.speedValue {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--clr-accent);
+}
+
+@media (max-width: 900px) {
+  .masterControls {
+    display: none;
+  }
+}

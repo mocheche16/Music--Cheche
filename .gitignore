@@ -2,6 +2,7 @@
 backend/venv/
 backend/env/
 .env
+backend/.env
 
 # Archivos de caché y logs de Python
 __pycache__/
@@ -17,6 +18,9 @@ backend/stems/
 frontend/node_modules/
 frontend/dist/
 frontend/.eslintcache
+
+# TypeScript
+*.tsbuildinfo
 
 # Archivos del Sistema Operativo
 .DS_Store

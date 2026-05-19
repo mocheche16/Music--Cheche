@@ -1,0 +1,123 @@
+.bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(18, 18, 23, 0.9);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--clr-border-bright);
+  z-index: 1000;
+  height: 72px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.progressBg {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  width: 100%;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--grad-primary);
+  box-shadow: 0 0 10px var(--clr-primary-glow);
+  transition: width 0.3s linear;
+}
+
+.inner {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.iconBox {
+  font-size: 20px;
+  background: var(--clr-bg-elevated);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--clr-border);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status {
+  font-size: 11px;
+  color: var(--clr-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--clr-border);
+  color: white;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--clr-border-bright);
+  transform: translateY(-2px);
+}
+
+.expandBtn {
+  background: var(--clr-primary);
+  border-color: var(--clr-primary-light);
+}
+
+.expandBtn:hover {
+  background: var(--clr-primary-light);
+  box-shadow: 0 0 15px var(--clr-primary-glow);
+}
+
+@media (max-width: 600px) {
+  .expandLabel {
+    display: none;
+  }
+  .inner {
+    padding: 0 16px;
+  }
+}

@@ -1,52 +1,39 @@
-"""
-database.py — Conexión a MySQL con SQLAlchemy
-"""
-import os
-from dotenv import load_dotenv
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
-load_dotenv()
+from app.config import settings
 
-# ── Construir URL de conexión ──────────────────────────────────────────────────
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "3306")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "root")
-DB_NAME = os.getenv("DB_NAME", "music_hub")
-
-DATABASE_URL = (
-    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    "?charset=utf8mb4"
+engine = create_async_engine(
+    settings.db_url,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    echo=False,
+    pool_size=10,
+    max_overflow=20,
 )
 
-# ── Engine & Session ───────────────────────────────────────────────────────────
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,        # Valida conexión antes de usar
-    pool_recycle=3600,         # Recicla conexiones cada hora
-    echo=False,                # True para ver SQL en consola (debug)
+async_session = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
-# ── Base declarativa ───────────────────────────────────────────────────────────
 class Base(DeclarativeBase):
     pass
 
 
-# ── Dependency Injection para FastAPI ─────────────────────────────────────────
-def get_db():
-    """Generador de sesión DB para usar con Depends() en FastAPI."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    async with async_session() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
-def init_db():
-    """Crea todas las tablas si no existen. Llamar al iniciar la app."""
-    from app.models import Song  # noqa: F401 — importar para registrar el modelo
-    Base.metadata.create_all(bind=engine)
+async def init_db():
+    from app.models import Song
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print("[DB] Tablas creadas/verificadas correctamente.")

@@ -1,29 +1,29 @@
 # ── Web Framework ──────────────────────────────────────────────────────────────
-# Versiones mínimas compatibles con Python 3.14
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.9
 
-# ── Base de Datos ──────────────────────────────────────────────────────────────
-sqlalchemy>=2.0.36             # 2.0.36+ requerido para Python 3.14
-pymysql>=1.1.1
-cryptography>=42.0.7           # requerido por pymysql con auth_plugin
-
-# ── Variables de Entorno ───────────────────────────────────────────────────────
+# ── Config ─────────────────────────────────────────────────────────────────────
+pydantic-settings>=2.6.0
 python-dotenv>=1.0.1
+
+# ── Base de Datos (PostgreSQL Async) ───────────────────────────────────────────
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30.0
 
 # ── Procesamiento de Audio ─────────────────────────────────────────────────────
 librosa>=0.10.2
 soundfile>=0.12.1
 numpy>=1.26.4
-torchcodec>=0.11.1             # Requerido por torchaudio 2.1+ en algunos entornos
 
 # ── Separación de Stems (Demucs) ───────────────────────────────────────────────
-# PyTorch se instala ANTES de este archivo (ver README):
-#   GPU:  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
-#   CPU:  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+# PyTorch se instala ANTES de este archivo:
+#   GPU: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+#   CPU: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 demucs>=4.0.1
 
 # ── Utilidades ─────────────────────────────────────────────────────────────────
-aiofiles>=23.2.1               # Lectura async de archivos
-httpx>=0.27.0                  # Cliente HTTP async
+aiofiles>=23.2.1
+httpx>=0.27.0
+loguru>=0.7.2
+slowapi>=0.1.9

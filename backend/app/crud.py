@@ -1,147 +1,141 @@
-"""
-crud.py — Operaciones CRUD sobre la tabla songs
-"""
 from datetime import datetime
-from typing import List, Optional
-from sqlalchemy.orm import Session
 
-from app.models import Song, ProcessingStatus
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import ProcessingStatus, Song
 from app.schemas import SongCreate
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# CREATE
-# ──────────────────────────────────────────────────────────────────────────────
-
-def create_song(db: Session, data: SongCreate) -> Song:
-    """Inserta un nuevo registro de canción con status=pending."""
+async def create_song(db: AsyncSession, data: SongCreate) -> Song:
     song = Song(
         original_name=data.original_name,
         original_path=data.original_path,
+        file_hash=data.file_hash,
         status=ProcessingStatus.pending,
     )
     db.add(song)
-    db.commit()
-    db.refresh(song)
+    await db.commit()
+    await db.refresh(song)
     return song
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# READ
-# ──────────────────────────────────────────────────────────────────────────────
-
-def get_song(db: Session, song_id: int) -> Optional[Song]:
-    """Obtiene una canción por ID."""
-    return db.query(Song).filter(Song.id == song_id).first()
+async def get_song(db: AsyncSession, song_id: int) -> Song | None:
+    result = await db.execute(select(Song).where(Song.id == song_id))
+    return result.scalar_one_or_none()
 
 
-def get_all_songs(db: Session, skip: int = 0, limit: int = 100) -> List[Song]:
-    """Lista todas las canciones ordenadas por fecha de creación descendente."""
-    return (
-        db.query(Song)
+async def get_song_by_hash(
+    db: AsyncSession, file_hash: str
+) -> Song | None:
+    result = await db.execute(
+        select(Song)
+        .where(Song.file_hash == file_hash)
+        .where(Song.status == ProcessingStatus.done)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_all_songs(
+    db: AsyncSession, skip: int = 0, limit: int = 100
+) -> tuple[list[Song], int]:
+    count_result = await db.execute(func.count(Song.id))
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(Song)
         .order_by(Song.created_at.desc())
         .offset(skip)
         .limit(limit)
-        .all()
     )
+    songs = list(result.scalars().all())
+    return songs, total
 
 
-def get_latest_done_song(db: Session) -> Optional[Song]:
-    """Obtiene la canción más reciente con status=done (para ReaScript)."""
-    return (
-        db.query(Song)
-        .filter(Song.status == ProcessingStatus.done)
+async def get_latest_done_song(db: AsyncSession) -> Song | None:
+    result = await db.execute(
+        select(Song)
+        .where(Song.status == ProcessingStatus.done)
         .order_by(Song.created_at.desc())
-        .first()
+        .limit(1)
     )
+    return result.scalar_one_or_none()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# UPDATE — Estado del procesamiento
-# ──────────────────────────────────────────────────────────────────────────────
-
-def set_processing(db: Session, song_id: int) -> Optional[Song]:
-    """Marca la canción como 'processing'."""
-    song = get_song(db, song_id)
+async def set_processing(
+    db: AsyncSession, song_id: int
+) -> Song | None:
+    song = await get_song(db, song_id)
     if song:
         song.status = ProcessingStatus.processing
         song.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(song)
+        await db.commit()
+        await db.refresh(song)
     return song
 
 
-def set_done(
-    db: Session,
+async def set_done(
+    db: AsyncSession,
     song_id: int,
     bpm: float,
     key: str,
     stems: dict,
-) -> Optional[Song]:
-    """
-    Actualiza la canción con los resultados del procesamiento.
-
-    Args:
-        stems: dict con keys vocals, drums, bass, guitar, piano, other
-               y valores con las rutas absolutas a los .wav
-    """
-    song = get_song(db, song_id)
+) -> Song | None:
+    song = await get_song(db, song_id)
     if song:
-        song.status      = ProcessingStatus.done
-        song.bpm         = round(bpm, 2)
-        song.key         = key
+        song.status = ProcessingStatus.done
+        song.bpm = round(bpm, 2)
+        song.key = key
         song.vocals_path = stems.get("vocals")
-        song.drums_path  = stems.get("drums")
-        song.bass_path   = stems.get("bass")
+        song.drums_path = stems.get("drums")
+        song.bass_path = stems.get("bass")
         song.guitar_path = stems.get("guitar")
-        song.piano_path  = stems.get("piano")
-        song.other_path  = stems.get("other")
-        song.updated_at  = datetime.utcnow()
-        db.commit()
-        db.refresh(song)
-    return song
-
-
-def set_error(db: Session, song_id: int, error_msg: str) -> Optional[Song]:
-    """Marca la canción con status=error y guarda el mensaje."""
-    song = get_song(db, song_id)
-    if song:
-        song.status    = ProcessingStatus.error
-        song.error_msg = error_msg[:990]   # Truncar para no exceder VARCHAR(1000)
+        song.piano_path = stems.get("piano")
+        song.other_path = stems.get("other")
+        song.tempo_path = stems.get("tempo")
         song.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(song)
+        await db.commit()
+        await db.refresh(song)
     return song
 
 
-def set_progress(db: Session, song_id: int, progress: int) -> Optional[Song]:
-    """Actualiza el porcentaje de progreso de la canción."""
-    song = get_song(db, song_id)
+async def set_error(
+    db: AsyncSession, song_id: int, error_msg: str
+) -> Song | None:
+    song = await get_song(db, song_id)
+    if song:
+        song.status = ProcessingStatus.error
+        song.error_msg = error_msg[:990]
+        song.updated_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(song)
+    return song
+
+
+async def set_progress(
+    db: AsyncSession, song_id: int, progress: int
+) -> Song | None:
+    song = await get_song(db, song_id)
     if song:
         song.progress = progress
-        db.commit()
-        db.refresh(song)
+        await db.commit()
     return song
 
 
-def set_processing_time(db: Session, song_id: int, seconds: int) -> Optional[Song]:
-    """Guarda el tiempo total que tomó el procesamiento."""
-    song = get_song(db, song_id)
+async def set_processing_time(
+    db: AsyncSession, song_id: int, seconds: int
+) -> Song | None:
+    song = await get_song(db, song_id)
     if song:
         song.processing_time = seconds
-        db.commit()
-        db.refresh(song)
+        await db.commit()
     return song
 
-# ──────────────────────────────────────────────────────────────────────────────
-# DELETE
-# ──────────────────────────────────────────────────────────────────────────────
 
-def delete_song(db: Session, song_id: int) -> bool:
-    """Elimina la canción de la base de datos."""
-    song = get_song(db, song_id)
+async def delete_song(db: AsyncSession, song_id: int) -> bool:
+    song = await get_song(db, song_id)
     if song:
-        db.delete(song)
-        db.commit()
+        await db.delete(song)
+        await db.commit()
         return True
     return False

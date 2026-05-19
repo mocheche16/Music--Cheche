@@ -1,87 +1,105 @@
-"""
-main.py — Entry point del servidor FastAPI
-
-Inicializa la app, configura CORS, monta los routers y arranca Uvicorn.
-"""
 import os
 import sys
 from contextlib import asynccontextmanager
 
-# Forzar UTF-8 en Windows para evitar UnicodeEncodeError con logs
+import uvicorn
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from loguru import logger
+
+load_dotenv()
+
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from dotenv import load_dotenv
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+logger.remove()
+logger.add(
+    sys.stdout,
+    format=(
+        "<green>{time:HH:mm:ss}</green> | <level>{level:<8}</level> | "
+        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+        "<level>{message}</level>"
+    ),
+    level=os.getenv("LOG_LEVEL", "INFO"),
+)
 
-load_dotenv()
 
-
-# ── Lifespan: acciones al arrancar/cerrar la app ───────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Al arrancar: crear tablas si no existen
-    from app.database import init_db
-    print("[Startup] Inicializando base de datos...")
+    logger.info("Inicializando base de datos...")
     try:
-        init_db()
-        print("[Startup] ✅ Base de datos lista.")
+        from app.database import init_db as _init_db
+        await _init_db()
+        logger.info("Base de datos lista.")
     except Exception as exc:
-        print(f"[Startup] ❌ Error de DB: {exc}")
-        print("[Startup] ⚠️  Verifica que MySQL está corriendo y las credenciales en .env son correctas.")
+        logger.error(f"Error de DB: {exc}")
+        logger.warning("Verifica que PostgreSQL está corriendo y las credenciales en .env.")
     yield
-    # Al cerrar: cleanup (si fuera necesario)
-    print("[Shutdown] Servidor detenido.")
+    logger.info("Servidor detenido.")
 
 
-# ── FastAPI App ────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Music Hub API",
     description="Hub de Análisis y Separación Musical — FastAPI + Demucs + Librosa",
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
 
-# ── CORS ───────────────────────────────────────────────────────────────────────
-CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:5173")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[CORS_ORIGIN, "http://localhost:3000"],
+    allow_origins=[
+        os.getenv("CORS_ORIGIN", "http://localhost:5173"),
+        "http://localhost:3000",
+        "http://localhost:4173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Routers ────────────────────────────────────────────────────────────────────
-from app.routers.tracks import router as tracks_router  # noqa: E402
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"],
+)
+
+
+@app.exception_handler(Exception)
+async def global_exc_handler(request, exc):
+    from app.middleware import global_exception_handler
+    return await global_exception_handler(request, exc)
+
+
+from app.routers.tracks import router as tracks_router
 
 app.include_router(tracks_router, tags=["tracks"])
 
+logger.info("Music Hub API iniciada")
 
-# ── Health Check ──────────────────────────────────────────────────────────────
+
 @app.get("/", tags=["health"])
-def root():
-    return {"status": "ok", "message": "Music Hub API está corriendo 🎵"}
+async def root():
+    return {
+        "status": "ok",
+        "message": "Music Hub API está corriendo",
+        "version": "1.1.0",
+    }
 
 
 @app.get("/health", tags=["health"])
-def health():
+async def health():
     return {"status": "ok"}
 
 
-# ── Entry Point ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import uvicorn
-
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
 
-    print(f"\n🎵 Music Hub API arrancando en http://{host}:{port}")
+    print(f"\n Music Hub API arrancando en http://{host}:{port}")
     print(f"   Docs: http://localhost:{port}/docs\n")
 
     uvicorn.run(
