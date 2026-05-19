@@ -22,6 +22,9 @@ frontend/.eslintcache
 # TypeScript
 *.tsbuildinfo
 
+# Vercel
+.vercel/
+
 # Archivos del Sistema Operativo
 .DS_Store
 Thumbs.db
